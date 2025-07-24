@@ -132,6 +132,17 @@ class Database {
     return result.rows[0];
   }
 
+  async hasCheckinBeenPosted(userId, friendHwfUserId, channelId, hwfCheckinId) {
+    const query = `SELECT id FROM feelings_posts WHERE user_id = $1 AND friend_hwf_user_id = $2 AND slack_channel_id = $3 AND hwf_checkin_id = $4`;
+    const result = await this.query(query, [
+      userId,
+      friendHwfUserId,
+      channelId,
+      hwfCheckinId,
+    ]);
+    return result.rows.length > 0;
+  }
+
   async getLastPostedCheckinId(userId, friendHwfUserId) {
     const query = `SELECT hwf_checkin_id FROM feelings_posts WHERE user_id = $1 AND friend_hwf_user_id = $2 ORDER BY posted_at DESC LIMIT 1`;
     const result = await this.query(query, [userId, friendHwfUserId]);
@@ -141,7 +152,7 @@ class Database {
   async getActiveUsersWithConfigurations() {
     const query = `
       SELECT 
-        u.id, 
+        u.id as user_id, 
         u.slack_user_id,
         u.hwf_user_id,
         cc.id as channel_configuration_id,
