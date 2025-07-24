@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080">
+  <defs>
+    <linearGradient id="grad_mood_thankful" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0" stop-color="#40c786" stop-opacity="1.0"/>
+      <stop offset="0.5" stop-color="#4ce39b" stop-opacity="1.0"/>
+      <stop offset="1" stop-color="#8befa2" stop-opacity="1.0"/>
+
+    </linearGradient>
+  </defs>
+  <path fill="url(#grad_mood_thankful)" d="M540,0C390.9,0 270,120.9 270,270C120.9,270 0,390.9 0,540C0,689.1 120.9,810 270,810C270,959.1 390.9,1080 540,1080C689.1,1080 810,959.1 810,810C959.1,810 1080,689.1 1080,540C1080,390.9 959.1,270 810,270C810,120.9 689.1,0 540,0Z"/>
+</svg>

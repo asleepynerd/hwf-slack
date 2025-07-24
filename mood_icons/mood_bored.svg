@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080">
+  <defs>
+    <linearGradient id="grad_mood_bored" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0" stop-color="#87c3fb" stop-opacity="1.0"/>
+      <stop offset="0.5" stop-color="#799fff" stop-opacity="1.0"/>
+      <stop offset="1" stop-color="#717fff" stop-opacity="1.0"/>
+
+    </linearGradient>
+  </defs>
+  <path fill="url(#grad_mood_bored)" d="M180,0C180,0 180,80.6 180,180C180,279.4 99.3,359.9 0,360V720C99.4,720 180,800.7 180,900C180,999.3 180,1080 180,1080H900C900,1080 900,999.3 900,900C900,800.7 980.7,720.1 1080,720V360C980.6,360 900,279.4 900,180C900,80.6 900,0 900,0H180Z"/>
+</svg>

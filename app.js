@@ -1,6 +1,8 @@
 require("dotenv").config();
 const { App } = require("@slack/bolt");
 const cron = require("node-cron");
+const fs = require("fs");
+const path = require("path");
 
 const Database = require("./database");
 const FirebaseClient = require("./firebase");
@@ -759,34 +761,84 @@ async function checkAndPostFeelingsForUser(user, client, isTest = false) {
   }
 }
 
-function buildFeelingsMessage(friend, includeNotes) {
-  const moodText = friend.moods
-    .map((mood) => {
-      return `${mood}`;
-    })
-    .join(", ");
+function getMoodIcon(moodName) {
+  try {
+    // wrrf wrrf wrrf wrrf wrrf wrrf
+    const fileName = `mood_${moodName.toLowerCase().replace(/\s+/g, "_")}.svg`;
+    const filePath = path.join(__dirname, "mood_icons", fileName);
 
-  let text = `*${friend.friendName}* is feeling: ${moodText}`;
+    if (fs.existsSync(filePath)) {
+      const svgContent = fs.readFileSync(filePath, "utf8");
+      // sorry i let my dog get on my keyboard again
+      const base64 = Buffer.from(svgContent).toString("base64");
+      return `data:image/svg+xml;base64,${base64}`;
+    }
+  } catch (error) {
+    console.error(`Error loading mood icon for ${moodName}:`, error);
+  }
+  return null;
+}
+
+function buildFeelingsMessage(friend, includeNotes) {
+  const moodElements = [];
+
+  // get the icons because i'm quirky like that
+  friend.moods.forEach((mood) => {
+    const iconUrl = getMoodIcon(mood);
+    if (iconUrl) {
+      moodElements.push({
+        type: "image",
+        image_url: iconUrl,
+        alt_text: mood,
+      });
+    }
+    moodElements.push({
+      type: "mrkdwn",
+      text: mood,
+    });
+  });
+
+  let text = `*${friend.friendName}* is feeling: ${friend.moods.join(", ")}`;
+
+  const blocks = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*${friend.friendName}* is feeling:`,
+      },
+    },
+  ];
+
+  // icons !!
+  if (moodElements.length > 0) {
+    for (let i = 0; i < moodElements.length; i += 10) {
+      const chunk = moodElements.slice(i, i + 10);
+      blocks.push({
+        type: "context",
+        elements: chunk,
+      });
+    }
+  }
 
   if (includeNotes && friend.note) {
     const noteLines = friend.note
       .split("\n")
       .map((line) => `> ${line}`)
       .join("\n");
-    text += `\n${noteLines}`;
+
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: noteLines,
+      },
+    });
   }
 
   return {
     text: text,
-    blocks: [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: text,
-        },
-      },
-    ],
+    blocks: blocks,
   };
 }
 

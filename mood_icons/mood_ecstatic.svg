@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080">
+  <defs>
+    <linearGradient id="grad_mood_ecstatic" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0" stop-color="#ffb218" stop-opacity="1.0"/>
+      <stop offset="0.5" stop-color="#ffd04b" stop-opacity="1.0"/>
+      <stop offset="1" stop-color="#f8e46d" stop-opacity="1.0"/>
+
+    </linearGradient>
+  </defs>
+  <path fill="url(#grad_mood_ecstatic)" d="M0,0C149.1,149.2 149.1,390.8 0,540C149.1,689.2 149.1,930.8 0,1080C298.5,781.7 781.6,781.6 1080,1080C930.8,930.8 930.8,689.2 1080,540C930.8,390.8 930.8,149.2 1080,0C781.6,298.4 298.5,298.3 0,0Z"/>
+</svg>
