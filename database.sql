@@ -84,4 +84,8 @@ $$;
 
 ALTER TABLE users DROP COLUMN IF EXISTS target_channel_id;
 ALTER TABLE users DROP COLUMN IF EXISTS include_notes;
-ALTER TABLE users DROP COLUMN IF EXISTS is_active; 
+ALTER TABLE users DROP COLUMN IF EXISTS is_active;
+
+-- Add checkin_id to feelings_posts to prevent reposts
+ALTER TABLE feelings_posts ADD COLUMN IF NOT EXISTS hwf_checkin_id VARCHAR(100);
+CREATE INDEX IF NOT EXISTS idx_feelings_posts_checkin_id ON feelings_posts(user_id, friend_hwf_user_id, hwf_checkin_id); 

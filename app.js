@@ -828,27 +828,42 @@ cron.schedule("* * * * *", async () => {
           continue;
         }
 
-        const message = buildFeelingsMessage(
-          friendFeeling,
-          config.include_notes
-        );
-        const result = await app.client.chat.postMessage({
-          channel: config.slack_channel_id,
-          ...message,
-        });
+        try {
+          const message = buildFeelingsMessage(
+            friendFeeling,
+            config.include_notes
+          );
+          const result = await app.client.chat.postMessage({
+            channel: config.slack_channel_id,
+            ...message,
+          });
+          await db.createFeelingsPost(
+            config.user_id,
+            friendFeeling.friendId,
+            config.slack_channel_id,
+            result.ts,
+            friendFeeling,
+            friendFeeling.checkinId
+          );
 
-        await db.createFeelingsPost(
-          config.user_id,
-          friendFeeling.friendId,
-          config.slack_channel_id,
-          result.ts,
-          friendFeeling,
-          friendFeeling.checkinId
-        );
-
-        console.log(
-          `posted ${friendFeeling.friendName} to ${config.slack_channel_id}`
-        );
+          console.log(
+            `posted ${friendFeeling.friendName} to ${config.slack_channel_id}`
+          );
+        } catch (e) {
+          if (e.data?.error === "channel_not_found") {
+            console.error(
+              `channel ${config.slack_channel_id} not found for user ${config.user_id}, removing config`
+            );
+            await db.removeChannelConfiguration(
+              config.channel_configuration_id
+            );
+          } else {
+            console.error(
+              `failed to post for user ${config.user_id} in channel ${config.slack_channel_id}:`,
+              e
+            );
+          }
+        }
       }
     }
 
