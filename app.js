@@ -558,16 +558,58 @@ app.view("channel_select_modal", async ({ ack, body, view, client }) => {
   try {
     const botInfo = await client.auth.test();
     const botUserId = botInfo.user_id;
-    const members = await client.conversations.members({ channel: channelId });
 
-    if (!members.members.includes(botUserId)) {
-      await ack({
-        response_action: "errors",
-        errors: {
-          channel_input: "i'm not in that channel. please add me first!",
-        },
+    // Check if the channel exists and we can access it
+    let channelInfo;
+    try {
+      channelInfo = await client.conversations.info({ channel: channelId });
+    } catch (channelError) {
+      if (channelError.data?.error === "channel_not_found") {
+        await ack({
+          response_action: "errors",
+          errors: {
+            channel_input: "channel not found. please select a valid channel.",
+          },
+        });
+        return;
+      }
+      throw channelError;
+    }
+
+    // Check if the bot is a member of the channel
+    try {
+      const members = await client.conversations.members({
+        channel: channelId,
       });
-      return;
+
+      if (!members.members.includes(botUserId)) {
+        await ack({
+          response_action: "errors",
+          errors: {
+            channel_input: `i'm not in #${channelInfo.channel.name}. please add me to the channel first, then try again.`,
+          },
+        });
+        return;
+      }
+    } catch (memberError) {
+      if (memberError.data?.error === "not_in_channel") {
+        await ack({
+          response_action: "errors",
+          errors: {
+            channel_input: `i'm not in #${channelInfo.channel.name}. please add me to the channel first, then try again.`,
+          },
+        });
+        return;
+      } else if (memberError.data?.error === "channel_not_found") {
+        await ack({
+          response_action: "errors",
+          errors: {
+            channel_input: "channel not found. please select a valid channel.",
+          },
+        });
+        return;
+      }
+      throw memberError;
     }
 
     await ack();
@@ -581,13 +623,40 @@ app.view("channel_select_modal", async ({ ack, body, view, client }) => {
     const updatedUser = await db.getUser(userId);
     const homeView = buildHomeView(updatedUser);
     await client.views.publish({ user_id: userId, view: homeView });
-  } catch (error) {
-    console.error("error saving channel config:", error);
+
+    // Send a success message
     await client.chat.postEphemeral({
       channel: userId,
       user: userId,
-      text: "there was an error saving the channel configuration.",
+      text: `✅ successfully configured #${channelInfo.channel.name} for feelings updates!`,
     });
+  } catch (error) {
+    console.error("error saving channel config:", error);
+
+    // Handle specific known errors
+    if (error.data?.error === "channel_not_found") {
+      await ack({
+        response_action: "errors",
+        errors: {
+          channel_input: "channel not found. please select a valid channel.",
+        },
+      });
+    } else if (error.data?.error === "not_in_channel") {
+      await ack({
+        response_action: "errors",
+        errors: {
+          channel_input:
+            "i'm not in that channel. please add me first, then try again.",
+        },
+      });
+    } else {
+      await ack();
+      await client.chat.postEphemeral({
+        channel: userId,
+        user: userId,
+        text: "there was an error saving the channel configuration. please try again.",
+      });
+    }
   }
 });
 
