@@ -10,7 +10,7 @@ const FirebaseClient = require("./firebase");
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
-  socketMode: true,
+  socketMode: process.env.SOCKET_MODE === "true",
   appToken: process.env.SLACK_APP_TOKEN,
   port: process.env.PORT || 3000,
 });
@@ -947,4 +947,24 @@ process.on("SIGTERM", async () => {
   console.log("shutting down");
   await db.close();
   process.exit(0);
+});
+
+process.on("uncaughtException", (err) => {
+  if (
+    err.message &&
+    err.message.includes("unhandled event 'server explicit disconnect'")
+  ) {
+    console.error(
+      "slack server explicit disconnect, attempting to reconnect..."
+    );
+    process.exit(1);
+  } else {
+    console.error("uncaught exception:", err);
+    process.exit(1);
+  }
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("unhandled rejection at:", promise, "reason:", reason);
+  process.exit(1);
 });
