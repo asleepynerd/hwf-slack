@@ -4,9 +4,6 @@ CREATE TABLE IF NOT EXISTS users (
     slack_team_id VARCHAR(50) NOT NULL,
     hwf_friend_code VARCHAR(10),
     hwf_user_id VARCHAR(100),
-    target_channel_id VARCHAR(50),
-    include_notes BOOLEAN DEFAULT false,
-    is_active BOOLEAN DEFAULT true,
     friend_status VARCHAR(20),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -46,8 +43,45 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_friend_connections_updated_at ON friend_connections;
 CREATE TRIGGER update_friend_connections_updated_at BEFORE UPDATE ON friend_connections 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column(); 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- sql i fucking hate you
+
+CREATE TABLE IF NOT EXISTS channel_configurations (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    slack_channel_id VARCHAR(50) NOT NULL,
+    include_notes BOOLEAN DEFAULT false,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, slack_channel_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_channel_configurations_user_id ON channel_configurations(user_id);
+
+CREATE TRIGGER update_channel_configurations_updated_at BEFORE UPDATE ON channel_configurations 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DO $$
+DECLARE
+    u RECORD;
+BEGIN
+    IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='target_channel_id') THEN
+        FOR u IN SELECT id, target_channel_id, include_notes, is_active FROM users WHERE target_channel_id IS NOT NULL LOOP
+            INSERT INTO channel_configurations (user_id, slack_channel_id, include_notes, is_active)
+            VALUES (u.id, u.target_channel_id, u.include_notes, u.is_active)
+            ON CONFLICT (user_id, slack_channel_id) DO NOTHING;
+        END LOOP;
+    END IF;
+END;
+$$;
+
+ALTER TABLE users DROP COLUMN IF EXISTS target_channel_id;
+ALTER TABLE users DROP COLUMN IF EXISTS include_notes;
+ALTER TABLE users DROP COLUMN IF EXISTS is_active; 

@@ -94,95 +94,86 @@ function buildHomeView(user) {
       },
     });
 
-    if (!user.target_channel_id) {
-      blocks.push(
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: "choose where to post your friends' feelings.",
-          },
-        },
-        {
-          type: "actions",
-          elements: [
-            {
-              type: "button",
-              text: {
-                type: "plain_text",
-                text: "select channel",
-              },
-              action_id: "select_channel",
-              style: "primary",
+    if (user.channel_configurations && user.channel_configurations.length > 0) {
+      blocks.push({ type: "divider" });
+      user.channel_configurations.forEach((config) => {
+        blocks.push(
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `*<#${config.slack_channel_id}>* | ${
+                config.is_active ? "Active" : "Paused"
+              } | ${
+                config.include_notes ? "Feelings + Notes" : "Feelings only"
+              }`,
             },
-          ],
-        }
-      );
+            accessory: {
+              type: "overflow",
+              options: [
+                {
+                  text: {
+                    type: "plain_text",
+                    text: config.is_active ? "Pause" : "Resume",
+                  },
+                  value: `toggle_channel_active:${config.id}`,
+                },
+                {
+                  text: { type: "plain_text", text: "Edit" },
+                  value: `edit_channel:${config.id}`,
+                },
+                {
+                  text: { type: "plain_text", text: "Delete" },
+                  value: `delete_channel:${config.id}`,
+                  style: "danger",
+                },
+              ],
+              action_id: "channel_actions",
+            },
+          },
+          { type: "divider" }
+        );
+      });
     } else {
-      blocks.push(
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `posting to: <#${user.target_channel_id}> ${
-              user.include_notes ? "(with notes)" : "(feelings only)"
-            }`,
-          },
-        },
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: user.is_active
-              ? "active - bot is monitoring and posting"
-              : "inactive",
-          },
-        }
-      );
-    }
-
-    blocks.push(
-      {
-        type: "divider",
-      },
-      {
+      blocks.push({
         type: "section",
         text: {
           type: "mrkdwn",
-          text: "settings & actions:",
+          text: "you haven't added any channels yet. add one to get started!",
         },
-      },
-      {
-        type: "actions",
-        elements: [
-          {
-            type: "button",
-            text: {
-              type: "plain_text",
-              text: "change channel",
-            },
-            action_id: "select_channel",
+      });
+    }
+
+    blocks.push({
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "Add Channel",
           },
-          {
-            type: "button",
-            text: {
-              type: "plain_text",
-              text: user.is_active ? "pause bot" : "start bot",
-            },
-            action_id: "toggle_active",
-            style: user.is_active ? undefined : "primary",
+          action_id: "add_channel",
+          style: "primary",
+        },
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "Test All Channels",
           },
-          {
-            type: "button",
-            text: {
-              type: "plain_text",
-              text: "test now",
-            },
-            action_id: "test_feelings",
+          action_id: "test_all_channels",
+        },
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "Pause/Resume All",
           },
-        ],
-      }
-    );
+          action_id: "toggle_all_channels",
+        },
+      ],
+    });
   }
 
   return {
@@ -242,6 +233,151 @@ app.action("add_friend_code", async ({ ack, body, client }) => {
     view: modal,
   });
 });
+
+app.action("channel_actions", async ({ ack, body, client, payload }) => {
+  await ack();
+  const [action, value] = payload.selected_option.value.split(":");
+  const configId = parseInt(value, 10);
+  const userId = body.user.id;
+
+  if (action === "toggle_channel_active") {
+    const config = await db.getChannelConfigurationById(configId);
+    if (config) {
+      await db.updateChannelConfiguration(
+        configId,
+        config.include_notes,
+        !config.is_active
+      );
+    }
+  } else if (action === "edit_channel") {
+    // wrrf wrrf
+    const config = await db.getChannelConfigurationById(configId);
+    const modal = buildChannelSelectModal(config);
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: modal,
+    });
+    return; // sorry my dog got on my keyboard
+  } else if (action === "delete_channel") {
+    await db.removeChannelConfiguration(configId);
+  }
+
+  const updatedUser = await db.getUser(userId);
+  const homeView = buildHomeView(updatedUser);
+  await client.views.publish({ user_id: userId, view: homeView });
+});
+
+app.action("add_channel", async ({ ack, body, client }) => {
+  await ack();
+  const modal = buildChannelSelectModal();
+  await client.views.open({
+    trigger_id: body.trigger_id,
+    view: modal,
+  });
+});
+
+app.action("toggle_all_channels", async ({ ack, body, client }) => {
+  await ack();
+  const user = await db.getUser(body.user.id);
+  const allActive = user.channel_configurations.every((c) => c.is_active);
+  for (const config of user.channel_configurations) {
+    await db.updateChannelConfiguration(
+      config.id,
+      config.include_notes,
+      !allActive
+    );
+  }
+  const updatedUser = await db.getUser(body.user.id);
+  const homeView = buildHomeView(updatedUser);
+  await client.views.publish({ user_id: body.user.id, view: homeView });
+});
+
+function buildChannelSelectModal(config = null) {
+  const initialChannel = config?.slack_channel_id || "";
+  const initialNotesValue = config?.include_notes ? "true" : "false";
+
+  return {
+    type: "modal",
+    callback_id: "channel_select_modal",
+    private_metadata: config ? JSON.stringify({ config_id: config.id }) : "{}",
+    title: {
+      type: "plain_text",
+      text: config ? "Edit Channel" : "Add Channel",
+    },
+    submit: {
+      type: "plain_text",
+      text: "Save",
+    },
+    close: {
+      type: "plain_text",
+      text: "Cancel",
+    },
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "select a channel and what you'd like to post.",
+        },
+      },
+      {
+        type: "input",
+        block_id: "channel_input",
+        element: {
+          type: "conversations_select",
+          action_id: "channel_id",
+          placeholder: {
+            type: "plain_text",
+            text: "select a channel...",
+          },
+          initial_conversation: initialChannel || undefined,
+        },
+        label: {
+          type: "plain_text",
+          text: "Channel",
+        },
+      },
+      {
+        type: "input",
+        block_id: "notes_input",
+        element: {
+          type: "radio_buttons",
+          action_id: "include_notes",
+          options: [
+            {
+              text: {
+                type: "plain_text",
+                text: "Feelings only",
+              },
+              value: "false",
+            },
+            {
+              text: {
+                type: "plain_text",
+                text: "Feelings + Notes",
+              },
+              value: "true",
+            },
+          ],
+          initial_option: {
+            text: {
+              type: "plain_text",
+              text:
+                initialNotesValue === "true"
+                  ? "Feelings + Notes"
+                  : "Feelings only",
+            },
+            value: initialNotesValue,
+          },
+        },
+        label: {
+          type: "plain_text",
+          text: "What to Post",
+        },
+      },
+    ],
+  };
+}
 
 app.action("select_channel", async ({ ack, body, client }) => {
   await ack();
@@ -364,35 +500,26 @@ app.action("toggle_active", async ({ ack, body, client }) => {
   }
 });
 
-app.action("test_feelings", async ({ ack, body, client }) => {
+app.action("test_all_channels", async ({ ack, body, client }) => {
   await ack();
-
-  try {
-    const user = await db.getUser(body.user.id);
-    if (!user?.target_channel_id) {
-      await client.chat.postEphemeral({
-        channel: body.user.id,
-        user: body.user.id,
-        text: "please configure a channel first",
-      });
-      return;
-    }
-
+  const user = await db.getUser(body.user.id);
+  if (
+    !user.channel_configurations ||
+    user.channel_configurations.length === 0
+  ) {
     await client.chat.postEphemeral({
       channel: body.user.id,
       user: body.user.id,
-      text: "testing... checking for feelings now",
+      text: "no channels configured to test",
     });
-
-    await checkAndPostFeelings(user, client);
-  } catch (error) {
-    console.error("error testing feelings:", error);
-    await client.chat.postEphemeral({
-      channel: body.user.id,
-      user: body.user.id,
-      text: "test failed. check your config (or bully ella to fix it).",
-    });
+    return;
   }
+  await client.chat.postEphemeral({
+    channel: body.user.id,
+    user: body.user.id,
+    text: "testing all active channels...",
+  });
+  await checkAndPostFeelingsForUser(user, client, true);
 });
 
 app.view("friend_code_modal", async ({ ack, body, view, client }) => {
@@ -500,50 +627,37 @@ app.view("friend_code_modal", async ({ ack, body, view, client }) => {
 });
 
 app.view("channel_select_modal", async ({ ack, body, view, client }) => {
-  const channelId = view.state.values.channel_input.channel_id.value?.trim();
+  const channelId =
+    view.state.values.channel_input.channel_id.selected_conversation;
   const includeNotes =
     view.state.values.notes_input.include_notes.selected_option.value ===
     "true";
   const userId = body.user.id;
+  const user = await db.getUser(userId);
 
-  if (!channelId || !/^C[A-Z0-9]{8,}$/.test(channelId)) {
+  const metadata = JSON.parse(view.private_metadata || "{}");
+  const configId = metadata.config_id;
+
+  if (!channelId) {
     await ack({
       response_action: "errors",
       errors: {
-        channel_input:
-          "enter a valid slack channel id (starts with C followed by letters/numbers)",
+        channel_input: "please select a channel",
       },
     });
     return;
   }
 
   try {
-    const channelInfo = await client.conversations.info({
-      channel: channelId,
-    });
-
-    if (!channelInfo.ok) {
-      await ack({
-        response_action: "errors",
-        errors: {
-          channel_input: "channel not found. check the id.",
-        },
-      });
-      return;
-    }
-
-    const members = await client.conversations.members({
-      channel: channelId,
-    });
-
     const botInfo = await client.auth.test();
     const botUserId = botInfo.user_id;
+    const members = await client.conversations.members({ channel: channelId });
 
     if (!members.members.includes(botUserId)) {
       await ack({
         response_action: "errors",
         errors: {
-          channel_input: `i'm not a member of #${channelInfo.channel.name}. add me first.`,
+          channel_input: "i'm not in that channel. please add me first!",
         },
       });
       return;
@@ -551,123 +665,93 @@ app.view("channel_select_modal", async ({ ack, body, view, client }) => {
 
     await ack();
 
-    await db.updateUserChannel(userId, channelId, includeNotes);
-
-    const userInfo = await client.users.info({ user: userId });
-    const userName =
-      userInfo.user.real_name ||
-      userInfo.user.display_name ||
-      userInfo.user.name;
-
-    await client.chat.postMessage({
-      channel: channelId,
-      text: `${userName} has set up how we feel notifications in this channel!`,
-      blocks: [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `${userName} has set up how we feel notifications in this channel!`,
-          },
-        },
-        {
-          type: "context",
-          elements: [
-            {
-              type: "mrkdwn",
-              text: `this channel will receive ${
-                includeNotes ? "feelings and notes" : "feelings only"
-              } from ${userName}, pssssst, did you know i'm <open source|https://github.com/asleepynerd/hwf-slack>?`,
-            },
-          ],
-        },
-      ],
-    });
+    if (configId) {
+      await db.updateChannelConfiguration(configId, includeNotes, true);
+    } else {
+      await db.addChannelConfiguration(user.id, channelId, includeNotes);
+    }
 
     const updatedUser = await db.getUser(userId);
     const homeView = buildHomeView(updatedUser);
-
-    await client.views.publish({
-      user_id: userId,
-      view: homeView,
-    });
-
+    await client.views.publish({ user_id: userId, view: homeView });
+  } catch (error) {
+    console.error("error saving channel config:", error);
     await client.chat.postEphemeral({
       channel: userId,
       user: userId,
-      text: `settings saved! feelings will be posted to #${
-        channelInfo.channel.name
-      } ${includeNotes ? "(with notes)" : "(feelings only)"}`,
+      text: "there was an error saving the channel configuration.",
     });
-  } catch (error) {
-    console.error("error saving channel settings:", error);
-
-    if (error.data?.error === "channel_not_found") {
-      await ack({
-        response_action: "errors",
-        errors: {
-          channel_input: "channel not found. check the id.",
-        },
-      });
-    } else if (error.data?.error === "not_in_channel") {
-      await ack({
-        response_action: "errors",
-        errors: {
-          channel_input: "i'm not a member of this channel. add me first.",
-        },
-      });
-    } else {
-      await ack();
-      await client.chat.postEphemeral({
-        channel: body.user.id,
-        user: body.user.id,
-        text: "failed to save settings. try again.",
-      });
-    }
   }
 });
 
-async function checkAndPostFeelings(user, client) {
-  if (!user.is_active || !user.target_channel_id || !user.hwf_user_id) {
-    console.log(`skipping user ${user.id} due to shit config`);
+async function checkAndPostFeelingsForUser(user, client, isTest = false) {
+  if (!user.hwf_user_id) {
+    console.log(`skipping user ${user.slack_user_id}: no hwf_user_id`);
+    return;
+  }
+
+  const activeConfigs = user.channel_configurations.filter(
+    (c) => c.is_active || isTest
+  );
+  if (activeConfigs.length === 0) {
     return;
   }
 
   try {
     const allFriendsFeelings = await firebase.getFriendsData();
-    const relevantFriendFeeling = allFriendsFeelings.find(
-      (friend) => friend.friendId === user.hwf_user_id
+    const friendFeeling = allFriendsFeelings.find(
+      (f) => f.friendId === user.hwf_user_id
     );
-    if (!relevantFriendFeeling) {
+
+    if (
+      !friendFeeling ||
+      !friendFeeling.accepted ||
+      !friendFeeling.hasCheckin
+    ) {
+      if (isTest) {
+        for (const config of activeConfigs) {
+          await client.chat.postEphemeral({
+            channel: config.slack_channel_id,
+            user: user.slack_user_id,
+            text: `(test) no new feelings found for *${
+              friendFeeling?.friendName || "your friend"
+            }*`,
+          });
+        }
+      }
       return;
     }
 
-    const friend = relevantFriendFeeling;
+    for (const config of activeConfigs) {
+      if (!isTest) {
+        const lastPostedCheckinId = await db.getLastPostedCheckinId(
+          user.id,
+          friendFeeling.friendId
+        );
+        if (lastPostedCheckinId === friendFeeling.checkinId) {
+          continue;
+        }
+      }
 
-    if (!friend.accepted || !friend.hasCheckin) return;
+      const message = buildFeelingsMessage(friendFeeling, config.include_notes);
+      const result = await client.chat.postMessage({
+        channel: config.slack_channel_id,
+        ...message,
+      });
 
-    const recentPost = await db.getRecentFeelingsPost(
-      user.id,
-      friend.friendId,
-      6
-    );
-    if (recentPost) return;
+      await db.createFeelingsPost(
+        user.id,
+        friendFeeling.friendId,
+        config.slack_channel_id,
+        result.ts,
+        friendFeeling,
+        friendFeeling.checkinId
+      );
 
-    const message = buildFeelingsMessage(friend, user.include_notes);
-    const result = await client.chat.postMessage({
-      channel: user.target_channel_id,
-      ...message,
-    });
-
-    await db.createFeelingsPost(
-      user.id,
-      friend.friendId,
-      user.target_channel_id,
-      result.ts,
-      friend
-    );
-
-    console.log(`posted ${friend.friendName} to ${user.target_channel_id}`);
+      console.log(
+        `posted ${friendFeeling.friendName} to ${config.slack_channel_id}`
+      );
+    }
   } catch (error) {
     console.error(
       `error checking/posting feelings for user ${user.id}:`,
@@ -686,7 +770,10 @@ function buildFeelingsMessage(friend, includeNotes) {
   let text = `*${friend.friendName}* is feeling: ${moodText}`;
 
   if (includeNotes && friend.note) {
-    const noteLines = friend.note.split('\n').map(line => `> ${line}`).join('\n');
+    const noteLines = friend.note
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
     text += `\n${noteLines}`;
   }
 

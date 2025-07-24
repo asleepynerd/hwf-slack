@@ -28,7 +28,20 @@ class Database {
   }
 
   async getUser(slackUserId) {
-    const query = "SELECT * FROM users WHERE slack_user_id = $1";
+    const query = `
+      SELECT 
+        u.*,
+        COALESCE(
+          (
+            SELECT json_agg(c.*) 
+            FROM channel_configurations c 
+            WHERE c.user_id = u.id
+          ), 
+          '[]'
+        ) AS channel_configurations
+      FROM users u
+      WHERE u.slack_user_id = $1
+    `;
     const result = await this.query(query, [slackUserId]);
     return result.rows[0];
   }
@@ -49,20 +62,43 @@ class Database {
     return result.rows[0];
   }
 
-  async updateUserChannel(slackUserId, channelId, includeNotes) {
-    const query = `UPDATE users SET target_channel_id = $2, include_notes = $3, updated_at = CURRENT_TIMESTAMP WHERE slack_user_id = $1 RETURNING *`;
-    const result = await this.query(query, [
-      slackUserId,
-      channelId,
-      includeNotes,
-    ]);
+  async addChannelConfiguration(userId, channelId, includeNotes) {
+    const query = `
+      INSERT INTO channel_configurations (user_id, slack_channel_id, include_notes) 
+      VALUES ($1, $2, $3) 
+      ON CONFLICT (user_id, slack_channel_id) 
+      DO UPDATE SET include_notes = $3, updated_at = CURRENT_TIMESTAMP
+      RETURNING *
+    `;
+    const result = await this.query(query, [userId, channelId, includeNotes]);
+    return result.rows[0];
+  }
+
+  async updateChannelConfiguration(configId, includeNotes, isActive) {
+    const query = `
+      UPDATE channel_configurations 
+      SET include_notes = $2, is_active = $3, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = $1 RETURNING *`;
+    const result = await this.query(query, [configId, includeNotes, isActive]);
+    return result.rows[0];
+  }
+
+  async removeChannelConfiguration(configId) {
+    const query = "DELETE FROM channel_configurations WHERE id = $1";
+    await this.query(query, [configId]);
+  }
+
+  async getChannelConfigurationById(configId) {
+    const query = "SELECT * FROM channel_configurations WHERE id = $1";
+    const result = await this.query(query, [configId]);
     return result.rows[0];
   }
 
   async setUserActive(slackUserId, isActive) {
-    const query = `UPDATE users SET is_active = $2, updated_at = CURRENT_TIMESTAMP WHERE slack_user_id = $1 RETURNING *`;
-    const result = await this.query(query, [slackUserId, isActive]);
-    return result.rows[0];
+    const user = await this.getUser(slackUserId);
+    if (!user) return;
+    const query = `UPDATE channel_configurations SET is_active = $2 WHERE user_id = $1`;
+    await this.query(query, [user.id, isActive]);
   }
 
   async createFriendConnection(userId, friendHwfUserId, friendName, groupId) {
@@ -102,11 +138,18 @@ class Database {
     return result.rows[0]?.hwf_checkin_id || null;
   }
 
-  async getActiveUsersWithChannels() {
+  async getActiveUsersWithConfigurations() {
     const query = `
-      SELECT * 
-      FROM users 
-      WHERE is_active = true AND target_channel_id IS NOT NULL;
+      SELECT 
+        u.id, 
+        u.slack_user_id,
+        u.hwf_user_id,
+        cc.id as channel_configuration_id,
+        cc.slack_channel_id,
+        cc.include_notes
+      FROM users u
+      JOIN channel_configurations cc ON u.id = cc.user_id
+      WHERE cc.is_active = true;
     `;
     const result = await this.query(query);
     return result.rows;
