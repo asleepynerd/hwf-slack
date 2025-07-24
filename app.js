@@ -577,7 +577,7 @@ app.view("channel_select_modal", async ({ ack, body, view, client }) => {
               type: "mrkdwn",
               text: `this channel will receive ${
                 includeNotes ? "feelings and notes" : "feelings only"
-              } from ${userName}`,
+              } from ${userName}, pssssst, did you know i'm <open source|https://github.com/asleepynerd/hwf-slack>?`,
             },
           ],
         },
@@ -686,7 +686,8 @@ function buildFeelingsMessage(friend, includeNotes) {
   let text = `*${friend.friendName}* is feeling: ${moodText}`;
 
   if (includeNotes && friend.note) {
-    text += `\n> ${friend.note}`;
+    const noteLines = friend.note.split('\n').map(line => `> ${line}`).join('\n');
+    text += `\n${noteLines}`;
   }
 
   return {
