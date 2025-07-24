@@ -775,44 +775,28 @@ function getMoodIcon(moodName) {
 }
 
 function buildFeelingsMessage(friend, includeNotes) {
-  const moodElements = [];
-
-  // get the icons because i'm quirky like that
-  friend.moods.forEach((mood) => {
-    const iconUrl = getMoodIcon(mood);
-    if (iconUrl) {
-      moodElements.push({
-        type: "image",
-        image_url: iconUrl,
-        alt_text: mood,
-      });
-    }
-    moodElements.push({
-      type: "mrkdwn",
-      text: mood,
-    });
-  });
-
-  let text = `*${friend.friendName}* is feeling: ${friend.moods.join(", ")}`;
+  const moodText = friend.moods.join(", ");
+  let text = `*${friend.friendName}* is feeling: ${moodText}`;
 
   const blocks = [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `*${friend.friendName}* is feeling:`,
+        text: `*${friend.friendName}* is feeling: ${moodText}`,
       },
     },
   ];
 
-  // icons !!
-  if (moodElements.length > 0) {
-    for (let i = 0; i < moodElements.length; i += 10) {
-      const chunk = moodElements.slice(i, i + 10);
-      blocks.push({
-        type: "context",
-        elements: chunk,
-      });
+  // mood icons bc im quirkyyy
+  if (friend.moods.length > 0) {
+    const firstMoodIcon = getMoodIcon(friend.moods[0]);
+    if (firstMoodIcon) {
+      blocks[0].accessory = {
+        type: "image",
+        image_url: firstMoodIcon,
+        alt_text: friend.moods[0],
+      };
     }
   }
 
