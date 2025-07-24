@@ -805,30 +805,22 @@ cron.schedule("* * * * *", async () => {
     for (const feeling of allFriendsFeelings) {
       if (feeling.hasCheckin) {
         feelingsMap.set(feeling.friendId, feeling);
-      } else {
-        if (!feelingsMap.has(feeling.friendId)) {
-          feelingsMap.set(feeling.friendId, feeling);
-        }
       }
     }
 
-    const activeUsers = await db.getActiveUsersWithChannels();
+    const activeConfigs = await db.getActiveUsersWithConfigurations();
 
-    for (const user of activeUsers) {
-      if (!user.is_active || !user.target_channel_id || !user.hwf_user_id)
-        continue;
-
-      const friendFeeling = feelingsMap.get(user.hwf_user_id);
+    for (const config of activeConfigs) {
+      const friendFeeling = feelingsMap.get(config.hwf_user_id);
 
       if (
         friendFeeling &&
-        (friendFeeling.accepted === true ||
-          friendFeeling.accepted === undefined) &&
+        friendFeeling.accepted &&
         friendFeeling.hasCheckin &&
         friendFeeling.checkinId
       ) {
         const lastPostedCheckinId = await db.getLastPostedCheckinId(
-          user.id,
+          config.user_id,
           friendFeeling.friendId
         );
 
@@ -836,28 +828,31 @@ cron.schedule("* * * * *", async () => {
           continue;
         }
 
-        const message = buildFeelingsMessage(friendFeeling, user.include_notes);
+        const message = buildFeelingsMessage(
+          friendFeeling,
+          config.include_notes
+        );
         const result = await app.client.chat.postMessage({
-          channel: user.target_channel_id,
+          channel: config.slack_channel_id,
           ...message,
         });
 
         await db.createFeelingsPost(
-          user.id,
+          config.user_id,
           friendFeeling.friendId,
-          user.target_channel_id,
+          config.slack_channel_id,
           result.ts,
           friendFeeling,
           friendFeeling.checkinId
         );
 
         console.log(
-          `posted ${friendFeeling.friendName} to ${user.target_channel_id}`
+          `posted ${friendFeeling.friendName} to ${config.slack_channel_id}`
         );
       }
     }
 
-    console.log(`checked feelings for ${activeUsers.length} users`);
+    console.log(`checked feelings for ${activeConfigs.length} configurations`);
   } catch (error) {
     console.error("error in feelings check:", error);
   }
