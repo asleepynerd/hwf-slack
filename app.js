@@ -18,9 +18,7 @@ const app = new App({
 const db = new Database();
 const firebase = new FirebaseClient();
 
-app.event("app_home_opened", async ({ event, client, ack }) => {
-  await ack();
-
+app.event("app_home_opened", async ({ event, client }) => {
   try {
     await db.createUser(event.user, event.view?.team_id || "unknown");
 
