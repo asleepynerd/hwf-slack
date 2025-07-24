@@ -765,14 +765,9 @@ function getMoodIcon(moodName) {
   try {
     // wrrf wrrf wrrf wrrf wrrf wrrf
     const fileName = `mood_${moodName.toLowerCase().replace(/\s+/g, "_")}.png`;
-    const filePath = path.join(__dirname, "mood_icons_png", fileName);
-
-    if (fs.existsSync(filePath)) {
-      const pngContent = fs.readFileSync(filePath);
-      // sorry i let my dog get on my keyboard again
-      const base64 = pngContent.toString("base64");
-      return `data:image/png;base64,${base64}`;
-    }
+    const baseurl = "https://furry.lat/hwf_moods/";
+    return `${baseurl}${fileName}`;
+    // sorry i let my dog get on my keyboard again
   } catch (error) {
     console.error(`Error loading mood icon for ${moodName}:`, error);
   }
