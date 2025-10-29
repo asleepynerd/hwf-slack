@@ -11,8 +11,7 @@
   "keywords": [
     "slack",
     "bot",
-    "feelings",
-    "firebase"
+    "feelings"
   ],
   "author": "asleepynerd",
   "license": "ISC",
@@ -22,7 +21,8 @@
     "pg": "^8.11.3",
     "axios": "^1.6.2",
     "dotenv": "^16.3.1",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "ws": "^8.14.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
